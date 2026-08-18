@@ -1,0 +1,54 @@
+# ========== 编译产物 ==========
+*.o
+*.obj
+*.exe
+*.lib
+*.dll
+*.a
+*.so
+*.pdb
+*.ilk
+*.exp
+
+# ========== 构建目录 ==========
+build/
+out/
+*/build/
+*/out/
+
+# ========== Qt 自动生成 ==========
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+*.pro.user
+
+# ========== IDE / 编辑器 ==========
+.vs/
+.vscode/
+.qt/
+*.user
+*.suo
+*.sdf
+*.opensdf
+*.opendb
+*.VC.db
+*.VC.VC.opendb
+Debug/
+Release/
+x64/
+x86/
+
+# ========== 系统文件 ==========
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# ========== 日志 / 临时文件 ==========
+*.log
+*.md
+tmp/
+temp/
+*.docx

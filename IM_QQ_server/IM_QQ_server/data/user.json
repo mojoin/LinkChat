@@ -1,0 +1,17 @@
+[
+    {
+        "uid": 10001,
+        "password": "123456",
+        "nickname": "小红"
+    },
+    {
+        "uid": 10002,
+        "password": "abc123",
+        "nickname": "小明"
+    },
+    {
+        "uid": 10003,
+        "password": "passwd",
+        "nickname": "小张"
+    }
+]

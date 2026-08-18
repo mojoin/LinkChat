@@ -1,0 +1,112 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "windows-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "installDir": "${sourceDir}/out/install/${presetName}",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "cl.exe",
+        "CMAKE_CXX_COMPILER": "cl.exe"
+      },
+      "environment": {
+        "VCToolsVersion": "14.34"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "Linux-Debug",
+      "displayName": "Linux Debug",
+      "generator": "Ninja",
+      "binaryDir": "/home/lcl/test/IM_QQ_server/out/build/${presetName}",
+      "installDir": "/home/lcl/test/IM_QQ_server/out/install/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "/usr/bin/cc",
+        "CMAKE_CXX_COMPILER": "/usr/bin/c++"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioRemoteSettings/CMake/1.0": {
+          "remoteMachineName": "10.82.112.118",
+          "remoteCMakeListsRoot": "/home/lcl/test/IM_QQ_server",
+          "remoteBuildRoot": "/home/lcl/test/IM_QQ_server/out/build/Linux-Debug",
+          "remoteInstallRoot": "/home/lcl/test/IM_QQ_server/out/install/Linux-Debug",
+          "remoteCopySources": true,
+          "remoteCopyBuildOutput": true,
+          "intelliSenseMode": "linux-gcc-x64",
+          "cppStandard": "c++17"
+        }
+      }
+    },
+    {
+      "name": "Linux-Release",
+      "displayName": "Linux Release",
+      "generator": "Ninja",
+      "binaryDir": "/home/lcl/test/IM_QQ_server/out/build/${presetName}",
+      "installDir": "/home/lcl/test/IM_QQ_server/out/install/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "/usr/bin/cc",
+        "CMAKE_CXX_COMPILER": "/usr/bin/c++"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioRemoteSettings/CMake/1.0": {
+          "remoteMachineName": "10.82.112.118",
+          "remoteCMakeListsRoot": "/home/lcl/test/IM_QQ_server",
+          "remoteBuildRoot": "/home/lcl/test/IM_QQ_server/out/build/Linux-Release",
+          "remoteInstallRoot": "/home/lcl/test/IM_QQ_server/out/install/Linux-Release",
+          "remoteCopySources": true,
+          "remoteCopyBuildOutput": true,
+          "intelliSenseMode": "linux-gcc-x64",
+          "cppStandard": "c++17"
+        }
+      }
+    },
+    {
+      "name": "x64-debug",
+      "displayName": "x64 Debug",
+      "inherits": "windows-base",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "x64-release",
+      "displayName": "x64 Release",
+      "inherits": "x64-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "x86-debug",
+      "displayName": "x86 Debug",
+      "inherits": "windows-base",
+      "architecture": {
+        "value": "x86",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "x86-release",
+      "displayName": "x86 Release",
+      "inherits": "x86-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ]
+}
