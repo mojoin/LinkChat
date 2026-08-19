@@ -210,6 +210,48 @@ string handleGetHistory(const json& req)
     return reply.dump();
 }
 
+// 开始上传:校验 → 生成 transfer_id → 切 MODE_BINARY_UPLOAD → 回 upload_ready
+// 客户端发:{"type":"upload_file","to_uid":10002,"filename":"a.txt","size":1234}
+// 服务器回:{"type":"upload_ready","ok":true,"transfer_id":"tr_...","filename":"a.txt","size":1234,"to_uid":10002}
+string handleUploadFile(const json& req, int from_uid, int fd)
+{
+    if (from_uid == 0)
+        return makeError("upload_file: not logged in");
+    if (!req.contains("to_uid") || !req["to_uid"].is_number_integer())
+        return makeError("upload_file: missing or invalid 'to_uid' field");
+    if (!req.contains("filename") || !req["filename"].is_string())
+        return makeError("upload_file: missing or invalid 'filename' field");
+    if (!req.contains("size") || !req["size"].is_number_integer())
+        return makeError("upload_file: missing or invalid 'size' field");
+
+    const int    to_uid   = req["to_uid"].get<int>();
+    const string filename = req["filename"].get<string>();
+    const int64_t size    = req["size"].get<int64_t>();
+
+    if (to_uid <= 0)
+        return makeError("upload_file: invalid 'to_uid' (must be > 0)");
+    if (filename.empty())
+        return makeError("upload_file: filename cannot be empty");
+    if (size < 0)
+        return makeError("upload_file: invalid 'size' (must be >= 0)");
+
+    // 生成唯一 transfer id,真实磁盘文件用 transfer_id 作为 saved_name
+    const string transfer_id = FileStore::genTransferId();
+
+    // 先切模式再回确认(与 download_file 对称):
+    // 保证 handleMessage 返回时 mode 已切到 BINARY_UPLOAD,回包先于后续字节到达
+    beginUpload(fd, from_uid, to_uid, transfer_id, filename, size, transfer_id);
+
+    json reply;
+    reply["type"]        = "upload_ready";
+    reply["ok"]          = true;
+    reply["transfer_id"] = transfer_id;
+    reply["filename"]    = filename;
+    reply["size"]        = size;
+    reply["to_uid"]      = to_uid;
+    return reply.dump();
+}
+
 // 列出 [我] 和 [peer_uid] 之间的所有文件
 // 客户端发:{"type":"list_files","peer_uid":10002}
 // 服务器回:{"type":"files_reply","ok":true,"peer_uid":10002,"files":[...]}
@@ -369,6 +411,7 @@ string handleMessage(const std::string &line, int from_uid, int fd)
     if (type == "chat") return handleChat(req, from_uid);
     if (type == "get_history") return handleGetHistory(req);
     if (type == "list_files")    return handleListFiles(req, from_uid);
+    if (type == "upload_file")   return handleUploadFile(req, from_uid, fd);
     if (type == "download_file") return handleDownloadFile(req, from_uid, fd);
     if (type == "delete_file")   return handleDeleteFile(req, from_uid);
 

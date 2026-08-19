@@ -4,6 +4,7 @@
 #include <Qkeyevent>
 #include "messagehandler/messagehandler.h"
 #include "tcpclient/tcpclient.h"
+#include "sendfiledialog/sendfiledialog.h"
 #include <QDebug>
 
 Widget::Widget(TcpClient *tcp, MessageHandler *handler, QWidget *parent)
@@ -84,6 +85,18 @@ Widget::Widget(TcpClient *tcp, MessageHandler *handler, QWidget *parent)
         m_handler->sendGetHistory(uid);
     });
 
+
+    // "传文件"按钮 → 打开发送文件对话框(需要已选中一个聊天好友)
+    connect(ui->pB_SendFile, &QPushButton::clicked, this, [this]() {
+        if (m_currentPeerUid == 0)
+        {
+            qDebug() << "[Widget] 未选择好友,无法发送文件";
+            return;
+        }
+        SendFileDialog *dlg = new SendFileDialog(m_tcp, m_currentPeerUid, this);
+        dlg->setAttribute(Qt::WA_DeleteOnClose);
+        dlg->show();
+    });
 
     // 向服务器拉取好友列表
     m_handler->sendGetFriends(m_handler->currentUid());

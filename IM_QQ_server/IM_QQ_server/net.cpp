@@ -653,11 +653,13 @@ static void processBinaryUpload(socket_t fd, const char *data, int n)
                 memcpy(&len, st.header_buf.data(), 4);
                 int32_t L = (int32_t)ntohl(len);
                 st.expected_len = L;
+                cout << __FILE__ << __FILE__ << "后面多少是我的:" << L << endl;
                 st.chunk_buf.clear();
 
                 if (L == 0)
                 {
                     // 收到 FIN
+                    cout << "lcllcl";
                     finalizeUpload(fd);
                     return;
                 }
@@ -675,6 +677,7 @@ static void processBinaryUpload(socket_t fd, const char *data, int n)
             {
                 // 一块收完 → 写盘
                 st.file_out.write(st.chunk_buf.data(), st.chunk_buf.size());
+                cout << st.chunk_buf.data() << endl;
                 st.bytes_done += st.chunk_buf.size();
                 st.chunk_buf.clear();
                 st.expected_len = -1;

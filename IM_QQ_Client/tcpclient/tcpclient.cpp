@@ -1,5 +1,6 @@
 ﻿#include "tcpclient.h"
 #include <QDebug>
+#include <QDataStream>
 
 TcpClient::TcpClient(QObject *parent) 
     : QObject(parent) 
@@ -33,6 +34,8 @@ void TcpClient::connectToServer(const QString &host, quint16 port)
             this, &TcpClient::onReadyRead);
     connect(m_socket, &QAbstractSocket::errorOccurred,
             this, &TcpClient::onErrorOccurred);
+    connect(m_socket, &QTcpSocket::bytesWritten,
+            this, &TcpClient::onBytesWritten);
 
     qDebug() << "[TcpClient] 正在连接" << host << ":" << port;
     m_socket->connectToHost(host, port);
@@ -63,6 +66,118 @@ bool TcpClient::isConnected() const
     return m_socket && m_socket->state() == QAbstractSocket::ConnectedState;
 }
 
+bool TcpClient::sendBinaryFile(const QString &filePath)
+{
+    if (m_fileSending)
+    {
+        qDebug() << "[TcpClient] 上一个文件仍在发送中";
+        return false;
+    }
+    if (!m_socket || !m_socket->isOpen())
+    {
+        qDebug() << "[TcpClient] 未连接，无法发送文件";
+        emit fileSendError(QStringLiteral("未连接服务器"));
+        return false;
+    }
+
+    m_file.setFileName(filePath);
+    if (!m_file.open(QIODevice::ReadOnly))
+    {
+        qDebug() << "[TcpClient] 打开文件失败:" << filePath;
+        emit fileSendError(QStringLiteral("无法打开文件"));
+        return false;
+    }
+
+    m_fileTotal   = m_file.size();
+    m_fileSent    = 0;
+    m_fileSending = true;
+    m_finSent     = false;
+
+    // 先发第一块；后续由 bytesWritten 推进
+    tryFlushSend();
+    return true;
+}
+
+void TcpClient::cancelBinarySend()
+{
+    m_fileSending = false;
+    m_finSent     = false;
+    if (m_file.isOpen())
+        m_file.close();
+    m_fileTotal = 0;
+    m_fileSent  = 0;
+}
+
+// 尝试把剩余数据塞进 socket 缓冲，发多少算多少。
+// 返回 true 表示还有空间继续 / 已全部完成；返回 false 表示缓冲满，需等下次 bytesWritten。
+bool TcpClient::tryFlushSend()
+{
+    if (!m_fileSending || !m_file.isOpen())
+        return false;
+
+    // 数据未发完：读一块塞进缓冲，尊重 write() 返回值
+    if (m_fileSent < m_fileTotal)
+    {
+        QByteArray block = m_file.read(CHUNK);
+        if (block.isEmpty())
+            return false; // 读不到更多数据
+
+        // 帧 = 4 字节网络序长度 + 数据
+        QByteArray frame;
+        QDataStream ds(&frame, QIODevice::WriteOnly);
+        ds.setByteOrder(QDataStream::BigEndian);
+        ds << (quint32)block.size();
+        frame.append(block);
+
+        qint64 n = m_socket->write(frame);
+        if (n <= 0)
+        {
+            // 缓冲满/入队失败：回退已读的位置，块留在下次再发
+            m_file.seek(m_file.pos() - block.size());
+            return false;
+        }
+        qDebug() << __FILE__ << __LINE__ <<  frame;
+        // 只累加"真正入队的数据字节"（write 可能部分入队，但此处以数据块计）
+        m_fileSent += block.size();
+
+        emit fileProgress(m_fileSent, m_fileTotal);
+        return true;
+    }
+
+    // 数据已全部入队：发 FIN（4 字节 0），确认入队后才算完成
+    if (!m_finSent)
+    {
+        QByteArray fin;
+        QDataStream ds(&fin, QIODevice::WriteOnly);
+        ds.setByteOrder(QDataStream::BigEndian);
+        ds << (quint32)0;
+
+        if (m_socket->write(fin) == 4)
+        {
+            qDebug() << __FILE__ << __LINE__ <<  fin;
+            m_finSent     = true;
+            m_fileSending = false;
+            m_file.close();
+            emit fileSendFinished();
+        }
+        // 写不进去，等下次 bytesWritten 再试
+    }
+    return false;
+}
+
+void TcpClient::onBytesWritten(qint64 /*bytes*/)
+{
+    if (!m_fileSending || !m_file.isOpen())
+        return;
+
+    // 缓冲腾出空间就继续推进；单次事件限次，防阻塞事件循环
+    for (int i = 0; i < MAX_WRITES_PER_CALL; ++i)
+    {
+        if (!tryFlushSend())
+            break; // 缓冲满或已完成，停下
+    }
+}
+
 void TcpClient::onConnected()   // 槽函数：连接成功
 {
     qDebug() << "[TcpClient] 已连接到服务器" << m_host << ":" << m_port;
@@ -74,6 +189,13 @@ void TcpClient::onDisconnected()
     qDebug() << "[TcpClient] 与服务器断开连接";
     // 清空半包残留数据，避免重连后污染下一段流
     m_recvBuffer.clear();
+    if (m_fileSending)
+    {
+        m_fileSending = false;
+        if (m_file.isOpen())
+            m_file.close();
+        emit fileSendError(QStringLiteral("连接已断开"));
+    }
     emit disconnected();
 }
 
@@ -81,6 +203,13 @@ void TcpClient::onErrorOccurred(QAbstractSocket::SocketError /*socketError*/)
 {
     QString err = m_socket ? m_socket->errorString() : QStringLiteral("unknown");
     qDebug() << "[TcpClient] 错误:" << err;
+    if (m_fileSending)
+    {
+        m_fileSending = false;
+        if (m_file.isOpen())
+            m_file.close();
+        emit fileSendError(QStringLiteral("发送出错:") + err);
+    }
     emit errorOccurred(err);
 }
 
