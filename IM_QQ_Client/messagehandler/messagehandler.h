@@ -45,6 +45,7 @@ public:
     // 文件传输相关
     void sendListFiles(qint64 peer_uid);
     void sendDownloadFile(const QString &transfer_id, qint64 peer_uid);
+    void sendDeleteFile(const QString &transfer_id, qint64 peer_uid);
 
     explicit MessageHandler(TcpClient *client, QObject *parent = nullptr);
 
@@ -88,6 +89,9 @@ signals:
 
     // 收到 download_reply ok=false:下载请求被拒绝
     void downloadFailed(const QString &transfer_id, const QString &msg);
+
+    // 收到 delete_reply:删除文件成功
+    void deleteReply(bool ok, const QString &transfer_id, const QString &msg);
 
     // 收到 error：协议层错误
     void errorMessage(const QString &msg);

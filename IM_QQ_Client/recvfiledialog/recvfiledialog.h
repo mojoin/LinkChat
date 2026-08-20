@@ -53,7 +53,9 @@ private slots:
     // void onFrame(const QString &line);
     void onFileRecvProgress(qint64 received, qint64 total);
     void onFileRecvFinished(const QString &transferId, const QString &localPath);
+    void onDeleteReply(bool ok, const QString &transfer_id, const QString &msg);
     void onFileRecvError(const QString &msg);
+    void on_pB_Delete_clicked();
 
 private:
     void requestList(); // 发 {"type":"list_files", ...} 给服务器

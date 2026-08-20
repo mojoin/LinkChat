@@ -68,6 +68,7 @@ RecvFileDialog::RecvFileDialog (TcpClient *client,
         connect(m_handler, &MessageHandler::filesReceived, this, &RecvFileDialog::onFilesReceived);
         connect(m_handler, &MessageHandler::downloadReady, this, &RecvFileDialog::onDownloadReady);
         connect(m_handler, &MessageHandler::downloadFailed, this, &RecvFileDialog::onDownloadFailed);
+        connect(m_handler, &MessageHandler::deleteReply, this, &RecvFileDialog::onDeleteReply);
     }
 
     ui->label_Status->setText(QStringLiteral("正在加载..."));
@@ -143,6 +144,32 @@ void RecvFileDialog::on_pB_Close_clicked()
     reject();
 }
 
+void RecvFileDialog::on_pB_Delete_clicked()
+{
+    if (m_downloading) return;
+
+    int row = ui->tableWidget_Files->currentRow();
+    if (row < 0 || row >= m_files.size()) return;
+
+    const FileEntry &f = m_files.at(row);
+
+    auto btn = QMessageBox::question(this,
+        QStringLiteral("确认删除"),
+        QStringLiteral("确定要删除与 uid:%1 的传输记录:\n%2 (%4 字节)\n\n服务器端文件和传输记录将被删除,本地已下载的副本不受影响。")
+            .arg(m_peerUid).arg(f.filename).arg(f.size),
+        QMessageBox::Yes | QMessageBox::No);
+    if (btn != QMessageBox::Yes) return;
+
+    if (!m_handler) {
+        QMessageBox::warning(this, QStringLiteral("错误"),
+                             QStringLiteral("网络未连接"));
+        return;
+    }
+
+    m_handler->sendDeleteFile(f.transferId, m_peerUid);
+    setBusy(true, QStringLiteral("正在删除 %1 ...").arg(f.filename));
+}
+
 void RecvFileDialog::onFilesReceived(qint64 peer_uid, const QList<FileEntry> &files)
 {
     Q_UNUSED(peer_uid);
@@ -198,6 +225,7 @@ void RecvFileDialog::on_tableWidget_Files_itemSelectionChanged()
 {
     bool has = ui->tableWidget_Files->currentRow() >= 0;
     ui->pB_Download->setEnabled(has && !m_downloading);
+    ui->pB_Delete->setEnabled(has && !m_downloading);
 }
 
 void RecvFileDialog::on_tableWidget_Files_itemDoubleClicked(QTableWidgetItem *item)
@@ -243,6 +271,29 @@ void RecvFileDialog::onFileRecvError(const QString &msg)
 {
     setBusy(false, QStringLiteral("下载出错:") + msg);
     m_pendingLocalPath.clear();
+}
+
+void RecvFileDialog::onDeleteReply(bool ok, const QString &transfer_id, const QString &msg)
+{
+    if (ok)
+    {
+        setBusy(false, QStringLiteral("已删除"));
+        // 从本地列表移除,不等服务器再回一次 list_files
+        for (int i = 0; i < m_files.size(); ++i)
+        {
+            if (m_files.at(i).transferId == transfer_id)
+            {
+                m_files.removeAt(i);
+                break;
+            }
+        }
+        renderList();
+    }
+    else
+    {
+        setBusy(false, QStringLiteral("删除失败"));
+        QMessageBox::warning(this, QStringLiteral("删除失败"), msg);
+    }
 }
 
 // ============================================================
@@ -326,6 +377,8 @@ void RecvFileDialog::setBusy(bool busy, const QString &status)
     ui->pB_Close->setEnabled(!busy);
     ui->tableWidget_Files->setEnabled(!busy);
     ui->progressBar->setVisible(busy);
+    ui->pB_Delete->setEnabled(!busy && ui->tableWidget_Files->currentRow() >= 0);
+
     if (busy)
     {
         ui->progressBar->setValue(0);

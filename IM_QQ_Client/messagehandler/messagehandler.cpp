@@ -8,11 +8,11 @@
 #include <QDateTime>
 
 MessageHandler::MessageHandler(TcpClient *client, QObject *parent)
-    : QObject(parent)
-    , m_tcp(client)
+    : QObject(parent), m_tcp(client)
 {
     // 订阅 TcpClient 的帧信号
-    if (m_tcp) {
+    if (m_tcp)
+    {
         connect(m_tcp, &TcpClient::frameReceived,
                 this, &MessageHandler::onFrame);
     }
@@ -21,26 +21,29 @@ MessageHandler::MessageHandler(TcpClient *client, QObject *parent)
 // ================ 发送 ================
 void MessageHandler::sendClientHello()
 {
-    if (!m_tcp) return;
+    if (!m_tcp)
+        return;
     m_tcp->sendFrame("CLIENT_HELLO 1");
 }
 
 void MessageHandler::sendEcho(const QString &msg)
 {
-    if (!m_tcp) return;
+    if (!m_tcp)
+        return;
     QJsonObject req;
     req["type"] = "echo";
-    req["msg"]  = msg;
+    req["msg"] = msg;
     QByteArray line = QJsonDocument(req).toJson(QJsonDocument::Compact);
     m_tcp->sendFrame(QString::fromUtf8(line));
 }
 
 void MessageHandler::sendLogin(qint64 uid, const QString &password)
 {
-    if (!m_tcp) return;
+    if (!m_tcp)
+        return;
     QJsonObject req;
-    req["type"]     = "login";
-    req["uid"]      = uid;
+    req["type"] = "login";
+    req["uid"] = uid;
     req["password"] = password;
     QByteArray line = QJsonDocument(req).toJson(QJsonDocument::Compact);
     m_tcp->sendFrame(QString::fromUtf8(line));
@@ -49,10 +52,11 @@ void MessageHandler::sendLogin(qint64 uid, const QString &password)
 
 void MessageHandler::sendRegister(qint64 uid, const QString &password, const QString &nickname)
 {
-    if (!m_tcp) return;
+    if (!m_tcp)
+        return;
     QJsonObject req;
-    req["type"]     = "register";
-    req["uid"]      = uid;
+    req["type"] = "register";
+    req["uid"] = uid;
     req["password"] = password;
     req["nickname"] = nickname;
     QByteArray line = QJsonDocument(req).toJson(QJsonDocument::Compact);
@@ -61,7 +65,8 @@ void MessageHandler::sendRegister(qint64 uid, const QString &password, const QSt
 
 void MessageHandler::sendGetFriends(qint64 uid)
 {
-    if (!m_tcp) return;
+    if (!m_tcp)
+        return;
     QJsonObject req;
     req["type"] = "get_friends";
     req["uid"] = uid;
@@ -117,15 +122,31 @@ void MessageHandler::sendDownloadFile(const QString &transfer_id, qint64 peer_ui
     m_tcp->sendFrame(QString::fromUtf8(line));
 }
 
+void MessageHandler::sendDeleteFile(const QString &transfer_id, qint64 peer_uid)
+{
+    if (!m_tcp)
+        return;
+    QJsonObject req;
+    req["type"] = "delete_file";
+    req["transfer_id"] = transfer_id;
+    req["peer_uid"] = peer_uid;
+    QByteArray line = QJsonDocument(req).toJson(QJsonDocument::Compact);
+    m_tcp->sendFrame(QString::fromUtf8(line));
+}
+
 // ================ 接收 ================
 void MessageHandler::onFrame(const QString &line)
 {
-    if (line.isEmpty()) return;
+    if (line.isEmpty())
+        return;
 
     // 分流：JSON 帧走 handleJson，纯文本帧走 handlePlain
-    if (line.startsWith('{')) {
+    if (line.startsWith('{'))
+    {
         handleJson(line);
-    } else {
+    }
+    else
+    {
         handlePlain(line);
     }
 }
@@ -134,22 +155,26 @@ void MessageHandler::handlePlain(const QString &line)
 {
     qDebug() << "[MessageHandler] 文本帧:" << line;
 
-    if (line == "SERVER_HELLO 1") {
+    if (line == "SERVER_HELLO 1")
+    {
         // 服务器打招呼，我们回应
         sendClientHello();
         return;
     }
 
-    if (line == "SERVER_WELCOME 1") {
+    if (line == "SERVER_WELCOME 1")
+    {
         // 握手完成
-        if (!m_handshaked) {
+        if (!m_handshaked)
+        {
             m_handshaked = true;
             emit handshakeDone();
         }
         return;
     }
 
-    if (line == "ERR_NEED_LOGIN") {
+    if (line == "ERR_NEED_LOGIN")
+    {
         // 服务器拒绝：需要先登录
         emit errorMessage(QStringLiteral("服务器要求先登录"));
         return;
@@ -162,14 +187,16 @@ void MessageHandler::handlePlain(const QString &line)
 void MessageHandler::handleJson(const QString &line)
 {
     QJsonDocument doc = QJsonDocument::fromJson(line.toUtf8());
-    if (!doc.isObject()) {
+    if (!doc.isObject())
+    {
         qDebug() << "[MessageHandler]收到非法 JSON:" << line;
         emit errorMessage(QStringLiteral("非法 JSON 帧"));
         return;
     }
     QJsonObject obj = doc.object();
     const QString type = obj.value("type").toString();
-    if (type.isEmpty()) {
+    if (type.isEmpty())
+    {
         qDebug() << "[MessageHandler] JSON 缺 type:" << line;
         emit errorMessage(QStringLiteral("JSON 帧缺少 type 字段"));
         return;
@@ -200,7 +227,8 @@ void MessageHandler::handleJson(const QString &line)
         return;
     }
 
-    if (type == "register_reply") {
+    if (type == "register_reply")
+    {
         bool ok = obj.value("ok").toBool(false);
         QString msg = obj.value("msg").toString();
         emit registerResult(ok, msg);
@@ -209,7 +237,7 @@ void MessageHandler::handleJson(const QString &line)
 
     if (type == "chat_ack")
     {
-        // 服务器已存盘,客户端可以放心    
+        // 服务器已存盘,客户端可以放心
         qint64 toUid = obj.value("to").toVariant().toLongLong();
         QString time = obj.value("time").toString();
         emit chatAck(toUid, time);
@@ -293,24 +321,39 @@ void MessageHandler::handleJson(const QString &line)
         return;
     }
 
-    if (type == "echo_reply") {
+    if (type == "delete_reply")
+    {
+        const bool ok = obj.value("ok").toBool(false);
+        const QString tid = obj.value("transfer_id").toString();
+        const QString msg = obj.value("msg").toString();
+        emit deleteReply(ok, tid, ok ? QString() : msg);
+        return;
+    }
+
+    if (type == "echo_reply")
+    {
         const QString msg = obj.value("msg").toString();
         emit echoReceived(msg);
         return;
     }
 
-    if (type == "login_reply") {
+    if (type == "login_reply")
+    {
         const bool ok = obj.value("ok").toBool(false);
-        if (ok) {
+        if (ok)
+        {
             emit loginResult(true, QString(), obj);
-        } else {
+        }
+        else
+        {
             const QString msg = obj.value("msg").toString();
             emit loginResult(false, msg, obj);
         }
         return;
     }
 
-    if (type == "error") {
+    if (type == "error")
+    {
         const QString msg = obj.value("msg").toString();
         emit errorMessage(msg);
         return;
