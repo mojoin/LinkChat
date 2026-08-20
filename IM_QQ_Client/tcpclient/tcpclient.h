@@ -32,6 +32,17 @@ public:
     // 中止正在进行的文件发送
     void cancelBinarySend();
 
+    // 开始以"4字节网络序长度 + 数据块"帧格式接收服务器发来的文件。
+    // 调用前请确认已收到 download_reply ok=true,并在收到后立即调用。
+    // 调用后 TcpClient 进入"下载模式",直到收到 4 字节 0(FIN)或出错。
+    // 进度/完成/错误通过 fileRecvProgress / fileRecvFinished / fileRecvError 信号回调。
+    bool startBinaryRecv(const QString &transferId,
+                     const QString &localPath,
+                     qint64 fileSize);
+
+    // 中止正在进行的文件接收
+    void cancelBinaryRecv();
+
 signals:
     void connected();
     void disconnected();
@@ -45,12 +56,21 @@ signals:
     // 文件发送失败（打开文件失败 / 断开等）
     void fileSendError(const QString &message);
 
+    // 二进制文件接收进度（已接收字节 / 总字节）
+    void fileRecvProgress(qint64 received, qint64 total);
+    // 文件全部接收完成（已收到 FIN）
+    void fileRecvFinished(const QString &transferId, const QString &localPath);
+    // 文件接收失败（断连 / 写文件失败等）
+    void fileRecvError(const QString &message);
+
 private slots:
     void onReadyRead();
     void onConnected();
     void onDisconnected();
     void onErrorOccurred(QAbstractSocket::SocketError socketError);
     void onBytesWritten(qint64 bytes);
+    void processBinaryRecv(); 
+    void onRecvBytesWritten(qint64 bytes);
 
 private:
     QTcpSocket *m_socket = nullptr;
@@ -69,5 +89,14 @@ private:
 
     // 把剩余数据塞进 socket 缓冲，发多少算多少；缓冲满返回 false
     bool tryFlushSend();
+
+    // ---- 二进制文件接收状态 ----
+    bool m_downloading = false;       // 是否处于"读二进制流"模式
+    QFile m_recvFile;                 // 正在接收的文件(写到本地)
+    qint64 m_recvExpected = 0;        // 当前帧预期字节数;0=在等长度头
+    qint64 m_recvFileSize = 0;        // 整个文件的总字节数(进度用)
+    qint64 m_recvFileGot = 0;         // 已写入本地的字节数
+    QString m_recvTransferId;         // 当前正在接收的 transfer_id
+    const int MAX_RECV_PER_CALL = 64; // 单次事件最多处理多少帧
 };
 #endif // TCPCLIENT_H

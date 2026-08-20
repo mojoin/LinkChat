@@ -8,6 +8,7 @@
 #include <QJsonObject>
 #include <QTimer>
 #include <QDebug>
+#include <QCloseEvent>
 
 SendFileDialog::SendFileDialog(TcpClient *client, qint64 toUid, QWidget *parent) :
     QDialog(parent),
@@ -18,6 +19,7 @@ SendFileDialog::SendFileDialog(TcpClient *client, qint64 toUid, QWidget *parent)
     ui->setupUi(this);
 
     ui->label_Title->setText(QStringLiteral("发送文件给好友"));
+    //setWindowFlags(windowFlags() & ~Qt::WindowCloseButtonHint);
 
     // 监听服务器帧(upload_ready / error)与二进制发送进度
     if (m_tcp)
@@ -32,6 +34,17 @@ SendFileDialog::SendFileDialog(TcpClient *client, qint64 toUid, QWidget *parent)
 SendFileDialog::~SendFileDialog()
 {
     delete ui;
+}
+
+void SendFileDialog::closeEvent(QCloseEvent *event)
+{
+    // 任意一个按钮还处于置灰状态,就说明还在上传流程中,拒绝关闭
+    if (!ui->pB_Start->isEnabled())
+    {
+        event->ignore();
+        return;
+    }
+    QDialog::closeEvent(event);
 }
 
 void SendFileDialog::on_pB_Browse_clicked()
@@ -143,8 +156,7 @@ void SendFileDialog::onFileFinished()
     m_transferring = false;
     ui->progressBar->setValue(100);
     ui->label_Status->setText(QStringLiteral("发送完成"));
-    // 稍后关闭,让用户看到完成提示
-    // QTimer::singleShot(600, this, &QDialog::accept);
+    setBusy(false, ui->label_Status->text());
 }
 
 void SendFileDialog::onFileError(const QString &msg)
@@ -158,7 +170,8 @@ void SendFileDialog::setBusy(bool busy, const QString &status)
 {
     ui->pB_Start->setEnabled(!busy);
     ui->pB_Browse->setEnabled(!busy);
-    ui->pB_Cancel->setEnabled(true); // 取消任何时候都可用
+    ui->pB_Cancel->setEnabled(!busy);
+
     if (!status.isEmpty())
         ui->label_Status->setText(status);
 }

@@ -20,7 +20,8 @@ SOURCES += \
     registerdialog/registerdialog.cpp \
     tcpclient/tcpclient.cpp \
     messagehandler/messagehandler.cpp \
-    sendfiledialog/sendfiledialog.cpp
+    sendfiledialog/sendfiledialog.cpp \
+    recvfiledialog/recvfiledialog.cpp
 
 HEADERS += \
     widget.h \
@@ -29,13 +30,15 @@ HEADERS += \
     registerdialog/registerdialog.h \
     tcpclient/tcpclient.h   \
     messagehandler/messagehandler.h \
-    sendfiledialog/sendfiledialog.h
+    sendfiledialog/sendfiledialog.h \
+    recvfiledialog/recvfiledialog.h
 
 FORMS += \
     widget.ui \
     logindialog.ui \
     registerdialog/registerdialog.ui \
-    sendfiledialog/sendfiledialog.ui
+    sendfiledialog/sendfiledialog.ui \
+    recvfiledialog/recvfiledialog.ui
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

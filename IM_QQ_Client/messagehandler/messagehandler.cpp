@@ -94,6 +94,29 @@ void MessageHandler::sendGetHistory(qint64 peer_uid)
     m_tcp->sendFrame(QString::fromUtf8(line));
 }
 
+void MessageHandler::sendListFiles(qint64 peer_uid)
+{
+    if (!m_tcp)
+        return;
+    QJsonObject req;
+    req["type"] = "list_files";
+    req["peer_uid"] = peer_uid;
+    QByteArray line = QJsonDocument(req).toJson(QJsonDocument::Compact);
+    m_tcp->sendFrame(QString::fromUtf8(line));
+}
+
+void MessageHandler::sendDownloadFile(const QString &transfer_id, qint64 peer_uid)
+{
+    if (!m_tcp)
+        return;
+    QJsonObject req;
+    req["type"] = "download_file";
+    req["transfer_id"] = transfer_id;
+    req["peer_uid"] = peer_uid;
+    QByteArray line = QJsonDocument(req).toJson(QJsonDocument::Compact);
+    m_tcp->sendFrame(QString::fromUtf8(line));
+}
+
 // ================ 接收 ================
 void MessageHandler::onFrame(const QString &line)
 {
@@ -217,6 +240,56 @@ void MessageHandler::handleJson(const QString &line)
         }
         qint64 peer = obj.value("peer_uid").toVariant().toLongLong();
         emit historyReceived(peer, list);
+        return;
+    }
+
+    if (type == "files_reply")
+    {
+        const bool ok = obj.value("ok").toBool(false);
+        if (!ok)
+        {
+            emit errorMessage(obj.value("msg").toString());
+            return;
+        }
+
+        QList<FileEntry> list;
+        QJsonArray arr = obj.value("files").toArray();
+        for (const auto &v : arr)
+        {
+            QJsonObject f = v.toObject();
+            FileEntry e;
+            e.transferId = f.value("transfer_id").toString();
+            e.fromUid = f.value("from").toVariant().toLongLong();
+            e.filename = f.value("filename").toString();
+            e.size = f.value("size").toVariant().toLongLong();
+            e.time = f.value("time").toString();
+            list.append(e);
+        }
+        qint64 peer = obj.value("peer_uid").toVariant().toLongLong();
+        emit filesReceived(peer, list);
+        return;
+    }
+
+    if (type == "download_reply")
+    {
+        const bool ok = obj.value("ok").toBool(false);
+        const QString tid = obj.value("transfer_id").toString();
+
+        if (!ok)
+        {
+            const QString msg = obj.value("msg").toString();
+            qDebug() << "[MessageHandler] download_reply 失败:" << tid << msg;
+            emit downloadFailed(tid, msg);
+            return;
+        }
+
+        const QString filename = obj.value("filename").toString();
+        const qint64 size = obj.value("size").toVariant().toLongLong();
+        const qint64 fromUid = obj.value("from_uid").toVariant().toLongLong();
+
+        qDebug() << "[MessageHandler] download_reply 成功:" << tid
+                 << "filename=" << filename << "size=" << size;
+        emit downloadReady(tid, filename, size, fromUid);
         return;
     }
 

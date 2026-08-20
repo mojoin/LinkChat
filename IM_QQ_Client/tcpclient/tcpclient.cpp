@@ -1,6 +1,8 @@
 ﻿#include "tcpclient.h"
 #include <QDebug>
 #include <QDataStream>
+#include <QtEndian>
+#include <cstring>
 
 TcpClient::TcpClient(QObject *parent) 
     : QObject(parent) 
@@ -66,6 +68,8 @@ bool TcpClient::isConnected() const
     return m_socket && m_socket->state() == QAbstractSocket::ConnectedState;
 }
 
+
+
 bool TcpClient::sendBinaryFile(const QString &filePath)
 {
     if (m_fileSending)
@@ -98,6 +102,39 @@ bool TcpClient::sendBinaryFile(const QString &filePath)
     return true;
 }
 
+bool TcpClient::startBinaryRecv(const QString &transferId, const QString &localPath, qint64 fileSize)
+{
+    if (m_downloading)
+    {
+        qDebug() << "[TcpClient] 已在接收文件中,无法开始新接收";
+        return false;
+    }
+    if (!m_socket || !m_socket->isOpen())
+    {
+        qDebug() << "[TcpClient] 未连接,无法接收文件";
+        emit fileRecvError(QStringLiteral("未连接服务器"));
+        return false;
+    }
+
+    m_recvFile.setFileName(localPath);
+    if (!m_recvFile.open(QIODevice::WriteOnly | QIODevice::Truncate))
+    {
+        qDebug() << "[TcpClient] 打开本地文件失败:" << localPath;
+        emit fileRecvError(QStringLiteral("无法打开本地文件"));
+        return false;
+    }
+
+    m_downloading    = true;
+    m_recvTransferId = transferId;
+    m_recvFileSize   = fileSize;
+    m_recvFileGot    = 0;
+    m_recvExpected   = 0;   // 0 = 等下一个 4 字节长度头
+
+    qDebug() << "[TcpClient] 开始接收文件:" << transferId
+             << "→" << localPath << "size=" << fileSize;
+    return true;
+}
+
 void TcpClient::cancelBinarySend()
 {
     m_fileSending = false;
@@ -107,6 +144,27 @@ void TcpClient::cancelBinarySend()
     m_fileTotal = 0;
     m_fileSent  = 0;
 }
+
+void TcpClient::cancelBinaryRecv()
+{
+    if (!m_downloading) return;
+
+    qDebug() << "[TcpClient] 取消接收文件:" << m_recvTransferId;
+    m_downloading    = false;
+    m_recvExpected   = 0;
+    m_recvFileSize   = 0;
+    m_recvFileGot    = 0;
+    QString tid      = m_recvTransferId;
+    QString path     = m_recvFile.fileName();
+    m_recvTransferId.clear();
+
+    if (m_recvFile.isOpen())
+        m_recvFile.close();
+
+    // 半成品文件保留在磁盘(用户可手动删除)
+    emit fileRecvError(QStringLiteral("用户取消:") + tid);
+}
+
 
 // 尝试把剩余数据塞进 socket 缓冲，发多少算多少。
 // 返回 true 表示还有空间继续 / 已全部完成；返回 false 表示缓冲满，需等下次 bytesWritten。
@@ -136,7 +194,6 @@ bool TcpClient::tryFlushSend()
             m_file.seek(m_file.pos() - block.size());
             return false;
         }
-        qDebug() << __FILE__ << __LINE__ <<  frame;
         // 只累加"真正入队的数据字节"（write 可能部分入队，但此处以数据块计）
         m_fileSent += block.size();
 
@@ -154,7 +211,6 @@ bool TcpClient::tryFlushSend()
 
         if (m_socket->write(fin) == 4)
         {
-            qDebug() << __FILE__ << __LINE__ <<  fin;
             m_finSent     = true;
             m_fileSending = false;
             m_file.close();
@@ -163,6 +219,80 @@ bool TcpClient::tryFlushSend()
         // 写不进去，等下次 bytesWritten 再试
     }
     return false;
+}
+
+// 下载模式的核心循环:从 m_recvBuffer 消费 4字节长度 + 数据块
+// 长度头为 0 表示 FIN,接收结束
+void TcpClient::processBinaryRecv()
+{
+    while (m_downloading && m_recvBuffer.size() >= 4)
+    {
+        // 1. 等下一个长度头
+        if (m_recvExpected == 0)
+        {
+            quint32 len_be = 0;
+            memcpy(&len_be, m_recvBuffer.constData(), 4);
+            m_recvExpected = qFromBigEndian(len_be);
+
+            // 移除 4 字节长度头
+            m_recvBuffer.remove(0, 4);
+
+            if (m_recvExpected == 0)
+            {
+                // 收到 FIN,接收完成
+                QString tid = m_recvTransferId;
+                QString path = m_recvFile.fileName();
+                if (m_recvFile.isOpen())
+                    m_recvFile.close();
+
+                m_downloading = false;
+                m_recvTransferId.clear();
+                m_recvFileSize = 0;
+                m_recvFileGot = 0;
+
+                qDebug() << "[TcpClient] 文件接收完成:" << tid << "→" << path;
+                emit fileRecvFinished(tid, path);
+                return;
+            }
+        }
+
+        // 2. 数据块还没攒够,等下次 readyRead
+        if (m_recvBuffer.size() < m_recvExpected)
+        {
+            return;
+        }
+
+        // 3. 取出这一帧数据,写盘
+        QByteArray block = m_recvBuffer.left(m_recvExpected);
+        qint64 written = m_recvFile.write(block);
+        if (written != m_recvExpected)
+        {
+            // 写盘失败
+            QString path = m_recvFile.fileName();
+            if (m_recvFile.isOpen())
+                m_recvFile.close();
+
+            m_downloading = false;
+            m_recvExpected = 0;
+            m_recvTransferId.clear();
+
+            qDebug() << "[TcpClient] 写文件失败:" << path;
+            emit fileRecvError(QStringLiteral("写文件失败:") + path);
+            return;
+        }
+
+        // 4. 已写入,推进缓冲和计数
+        m_recvBuffer.remove(0, m_recvExpected);
+        m_recvFileGot += m_recvExpected;
+        m_recvExpected = 0; // 回到等长度头状态
+
+        // 5. 进度回调
+        emit fileRecvProgress(m_recvFileGot, m_recvFileSize);
+    }
+}
+
+void TcpClient::onRecvBytesWritten(qint64 bytes)
+{
 }
 
 void TcpClient::onBytesWritten(qint64 /*bytes*/)
@@ -196,6 +326,19 @@ void TcpClient::onDisconnected()
             m_file.close();
         emit fileSendError(QStringLiteral("连接已断开"));
     }
+
+    // 如果正在下载文件
+    if (m_downloading)
+    {
+        m_downloading    = false;
+        m_recvExpected   = 0;
+        QString tid      = m_recvTransferId;
+        m_recvTransferId.clear();
+        if (m_recvFile.isOpen())
+            m_recvFile.close();
+        emit fileRecvError(QStringLiteral("连接已断开:") + tid);
+    }
+
     emit disconnected();
 }
 
@@ -203,6 +346,7 @@ void TcpClient::onErrorOccurred(QAbstractSocket::SocketError /*socketError*/)
 {
     QString err = m_socket ? m_socket->errorString() : QStringLiteral("unknown");
     qDebug() << "[TcpClient] 错误:" << err;
+
     if (m_fileSending)
     {
         m_fileSending = false;
@@ -210,6 +354,18 @@ void TcpClient::onErrorOccurred(QAbstractSocket::SocketError /*socketError*/)
             m_file.close();
         emit fileSendError(QStringLiteral("发送出错:") + err);
     }
+
+    if (m_downloading)
+    {
+        m_downloading    = false;
+        m_recvExpected   = 0;
+        QString tid      = m_recvTransferId;
+        m_recvTransferId.clear();
+        if (m_recvFile.isOpen())
+            m_recvFile.close();
+        emit fileRecvError(QStringLiteral("接收出错:") + err);
+    }
+
     emit errorOccurred(err);
 }
 
@@ -219,6 +375,13 @@ void TcpClient::onReadyRead()
 
     // 把刚到的字节追加到缓冲区
     m_recvBuffer.append(m_socket->readAll());
+
+    // 下载模式 → 按"4字节长度 + 数据块"协议消费,不再按 \n 切
+    if (m_downloading)
+    {
+        processBinaryRecv();
+        return;
+    }
 
     // 循环切出每一行（以 \n 为帧边界）
     while (true) {

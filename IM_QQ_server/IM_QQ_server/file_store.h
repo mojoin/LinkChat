@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <optional>
 
 struct TransferRecord   // 上传(落盘)
 {
@@ -39,9 +40,11 @@ public:
     static std::vector<TransferRecord> listForPair(int uid_a, int uid_b);
 
     // 通过 transfer_id 查找(下载时用)
-    static TransferRecord *findByTransferId(const std::string &transfer_id);
+    static std::optional<TransferRecord> findByTransferId(int uid_a, int uid_b, const std::string &transfer_id);
 
-    // 删除一条传输记录(双方都能删):删磁盘文件 + 移除 manifest +内存索引
-    static bool deleteTransfer(const std::string &transfer_id);
+    // 兜底:没有 uid 时全盘扫(平时不会走到)
+    static std::optional<TransferRecord> findByTransferId(const std::string &transfer_id);
 
+    // 删除一条传输记录(双方都能删):删磁盘文件 + 重写该对话的 manifest
+    static bool deleteTransfer(int uid_a, int uid_b, const std::string &transfer_id);
 };

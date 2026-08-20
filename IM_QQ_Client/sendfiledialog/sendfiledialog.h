@@ -19,6 +19,9 @@ public:
     explicit SendFileDialog(TcpClient *client, qint64 toUid, QWidget *parent = nullptr);
     ~SendFileDialog();
 
+protected:
+    void closeEvent(QCloseEvent *event) override;
+
 private slots:
     void on_pB_Browse_clicked();
     void on_pB_Start_clicked();

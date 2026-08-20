@@ -5,7 +5,9 @@
 #include "messagehandler/messagehandler.h"
 #include "tcpclient/tcpclient.h"
 #include "sendfiledialog/sendfiledialog.h"
+#include "recvfiledialog/recvfiledialog.h"
 #include <QDebug>
+
 
 Widget::Widget(TcpClient *tcp, MessageHandler *handler, QWidget *parent)
     : QWidget(parent)
@@ -14,9 +16,6 @@ Widget::Widget(TcpClient *tcp, MessageHandler *handler, QWidget *parent)
     , m_handler(handler)
 {
     ui->setupUi(this);
-
-    // 让输入框+发送按钮所在行随底栏高度伸缩
-    // ui->gridLayout->setRowStretch(0, 1);
 
     // 让 QTextEdit 行为像 QLineEdit
     ui->lineEidt_Message->setLineWrapMode(QTextEdit::NoWrap);  // 不自动折行
@@ -98,6 +97,19 @@ Widget::Widget(TcpClient *tcp, MessageHandler *handler, QWidget *parent)
         dlg->show();
     });
 
+    // "收文件"按钮 → 打开收文件对话框(查看与当前好友的文件传输记录)
+    connect(ui->pB_RecvFile, &QPushButton::clicked, this, [this]() {
+        if (m_currentPeerUid == 0)
+        {
+            qDebug() << "[Widget] 未选择好友,无法查看收文件";
+            return;
+        }
+        qint64 myUid = m_handler->currentUid();
+        RecvFileDialog *dlg = new RecvFileDialog(m_tcp, m_handler, myUid, m_currentPeerUid, this);
+        dlg->setAttribute(Qt::WA_DeleteOnClose);
+        dlg->show(); 
+    });
+
     // 向服务器拉取好友列表
     m_handler->sendGetFriends(m_handler->currentUid());
 }
@@ -164,3 +176,7 @@ void Widget::keyPressEvent(QKeyEvent *event)
     // 其它按键照常处理
     QWidget::keyPressEvent(event);
 }
+// void Widget::on_pB_RecvFile_clicked()
+// {
+
+// }

@@ -81,4 +81,4 @@ void beginUpload(socket_t fd,
                  const std::string &saved_name);
 
 // 调用后, fd 进入 BINARY_DOWNLOAD 模式, EPOLLOUT 触发时服务器开始推字节
-void beginDownload(socket_t fd, const std::string &transfer_id);
+void beginDownload(socket_t fd, int from_uid, int peer_uid, const std::string &transfer_id);

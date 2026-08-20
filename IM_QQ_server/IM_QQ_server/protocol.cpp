@@ -264,6 +264,7 @@ string handleListFiles(const json& req, int from_uid)
 
     const int peer = req["peer_uid"].get<int>();
 
+    // std::vector<TransferRecord> result;
     auto records = FileStore::listForPair(from_uid, peer);
 
     json arr = json::array();
@@ -299,12 +300,15 @@ string handleDownloadFile(const json& req, int from_uid, int fd)
         return makeError("download_file: not logged in");
     if (!req.contains("transfer_id") || !req["transfer_id"].is_string())
         return makeError("download_file: missing or invalid 'transfer_id' field");
+    if (!req.contains("peer_uid") || !req["peer_uid"].is_number_integer())
+        return makeError("download_file: missing or invalid 'peer_uid' field");
 
     const string tid = req["transfer_id"].get<string>();
+    const int peer   = req["peer_uid"].get<int>();
 
-    TransferRecord *rec = FileStore::findByTransferId(tid);
+    auto rec = FileStore::findByTransferId(from_uid, peer, tid);
     if (!rec)
-    {
+    {   
         json reply;
         reply["type"]        = "download_reply";
         reply["ok"]          = false;
@@ -336,7 +340,7 @@ string handleDownloadFile(const json& req, int from_uid, int fd)
     // 立刻切二进制流:把 file_in 准备好,mode 切到 MODE_BINARY_DOWNLOAD
     // 接下来 net.cpp 的 processLine 把 reply send 出去,
     // 然后 EPOLLOUT 触发 flushSendBuf 自动按 32KB 推文件,发完追加 4字节0 (FIN)
-    beginDownload(fd, tid);
+    beginDownload(fd, from_uid, peer, tid);
 
     return reply.dump();
 }
@@ -352,8 +356,9 @@ string handleDeleteFile(const json& req, int from_uid)
         return makeError("delete_file: missing or invalid 'transfer_id' field");
 
     const string tid = req["transfer_id"].get<string>();
+    const int peer   = req["peer_uid"].get<int>();
 
-    TransferRecord *rec = FileStore::findByTransferId(tid);
+    auto rec = FileStore::findByTransferId(from_uid, peer, tid);
     if (!rec)
     {
         json reply;
@@ -375,7 +380,7 @@ string handleDeleteFile(const json& req, int from_uid)
         return reply.dump();
     }
 
-    bool deleted = FileStore::deleteTransfer(tid);
+    bool deleted = FileStore::deleteTransfer(from_uid, peer, tid);
 
     json reply;
     reply["type"]        = "delete_reply";

@@ -13,9 +13,6 @@
 using json = nlohmann::json;
 namespace fs = std::filesystem;
 
-// 全局:内存里维护的索引,用于 findByTransferId
-static std::vector<TransferRecord> g_records;
-
 static std::string minMaxKey(int a, int b)
 {
     int mn = std::min(a, b);
@@ -77,8 +74,6 @@ void FileStore::recordUploaded(const TransferRecord &r)
     std::ofstream ofs(manifestPathFor(r.from_uid, r.to_uid), std::ios::app);
     ofs << j.dump() << "\n";
     ofs.close();
-
-    g_records.push_back(r); // 同步到内存索引
 }
 
 std::vector<TransferRecord> FileStore::listForPair(int uid_a, int uid_b)
@@ -113,58 +108,93 @@ std::vector<TransferRecord> FileStore::listForPair(int uid_a, int uid_b)
     return result;
 }
 
-TransferRecord *FileStore::findByTransferId(const std::string &transfer_id)
+static std::optional<TransferRecord> parseManifestLine(const std::string &line)
 {
-    for (auto &r : g_records)
+    try
     {
-        if (r.transfer_id == transfer_id)
-            return &r;
+        auto j = json::parse(line);
+        TransferRecord r;
+        r.transfer_id = j["transfer_id"].get<std::string>();
+        r.from_uid    = j["from_uid"].get<int>();
+        r.to_uid      = j["to_uid"].get<int>();
+        r.file_name   = j["file_name"].get<std::string>();
+        r.file_size   = j["file_size"].get<int64_t>();
+        r.upload_time = j.value("upload_time", "");
+        r.saved_name  = j.value("saved_name", "");
+        return r;
     }
-    return nullptr;
+    catch (...)
+    {
+        return std::nullopt;
+    }
 }
 
-bool FileStore::deleteTransfer(const std::string &transfer_id)
+// 定向查找:已知对方 uid,直接读该对话的 manifest,不扫其他目录
+std::optional<TransferRecord> FileStore::findByTransferId(int uid_a, int uid_b, const std::string &transfer_id)
 {
-    // 1. 先在内存索引里找这条记录(同时拿到 from_uid/to_uid,确定目录)
-    TransferRecord *rec = nullptr;
-    for (auto &r : g_records)
+    std::ifstream ifs(manifestPathFor(uid_a, uid_b));
+    if (!ifs.is_open())
+        return std::nullopt;
+
+    std::string line;
+    while (std::getline(ifs, line))
     {
-        if (r.transfer_id == transfer_id)
+        if (line.empty())
+            continue;
+        auto r = parseManifestLine(line);
+        if (r && r->transfer_id == transfer_id)
+            return r;
+    }
+    return std::nullopt;
+}
+
+// 兜底:没带 peer_uid 时全盘扫(平时不会走到)
+std::optional<TransferRecord> FileStore::findByTransferId(const std::string &transfer_id)
+{
+    std::error_code ec;
+    for (const auto &entry : fs::directory_iterator("data/files", ec))
+    {
+        if (!entry.is_directory())
+            continue;
+
+        std::ifstream ifs((entry.path() / "manifest.jsonl").string());
+        if (!ifs.is_open())
+            continue;
+
+        std::string line;
+        while (std::getline(ifs, line))
         {
-            rec = &r;
-            break;
+            if (line.empty())
+                continue;
+            auto r = parseManifestLine(line);
+            if (r && r->transfer_id == transfer_id)
+                return r;
         }
     }
-    if (!rec)   return false;
+    return std::nullopt;
+}
+
+bool FileStore::deleteTransfer(int uid_a, int uid_b, const std::string &transfer_id)
+{
+    // 1. 定向查该对话的 manifest(拿到完整记录,同时确定磁盘路径)
+    auto rec = findByTransferId(uid_a, uid_b, transfer_id);
+    if (!rec)
+        return false;
 
     // 2. 删磁盘文件 (路径 = convDir/<transfer_id>__<原文件名>)
     std::string file_path = savedPathFor(*rec);
     std::error_code ec;
     std::filesystem::remove(file_path, ec);
     if (ec)
-    {
         std::cerr << "deleteTransfer: remove file failed: " << ec.message() << std::endl;
-        // 不 return,继续把 manifest 和内存索引清掉
-    }
 
-    // 3. 从 g_records 里移除
-    g_records.erase(
-        std::remove_if(g_records.begin(), g_records.end(), [&](const TransferRecord &r) { 
-            return r.transfer_id == transfer_id; }),
-        g_records.end()
-    );
-
-    // 4. 重写 manifest.jsonl(把剩下的记录全部 dump回去)
-    std::string manifest = manifestPathFor(rec->from_uid, rec->to_uid);
+    // 3. 重写 manifest.jsonl:只保留该对话对里除本条以外的记录
+    auto remaining = listForPair(uid_a, uid_b);
+    std::string manifest = manifestPathFor(uid_a, uid_b);
     std::ofstream ofs(manifest, std::ios::trunc);
-    for (const auto &r : g_records)
+    for (const auto &r : remaining)
     {
-        // 只写属于这个对话对的记录(避免写脏其他对话)
-        int mn = std::min(r.from_uid, r.to_uid);
-        int mx = std::max(r.from_uid, r.to_uid);
-        int my_mn = std::min(rec->from_uid, rec->to_uid);
-        int my_mx = std::max(rec->from_uid, rec->to_uid);
-        if (mn != my_mn || mx != my_mx)
+        if (r.transfer_id == transfer_id)
             continue;
 
         json j;

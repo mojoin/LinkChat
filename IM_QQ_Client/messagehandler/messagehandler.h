@@ -5,6 +5,7 @@
 #include <QString>
 #include <QJsonObject>
 #include <QList>
+#include <QtGlobal>
 
 class TcpClient;
 
@@ -25,6 +26,14 @@ public:
         bool online;
     };
 
+    struct FileEntry {
+        QString transferId;
+        qint64  fromUid = 0;
+        QString filename;
+        qint64  size = 0;
+        QString time;
+    };
+
     void sendChat(qint64 to_uid, const QString &msg);
     void sendGetHistory(qint64 peer_uid);
 
@@ -32,6 +41,10 @@ public:
     qint64 currentUid() const { return m_currentUid; }
 
     void sendGetFriends(qint64 uid);
+
+    // 文件传输相关
+    void sendListFiles(qint64 peer_uid);
+    void sendDownloadFile(const QString &transfer_id, qint64 peer_uid);
 
     explicit MessageHandler(TcpClient *client, QObject *parent = nullptr);
 
@@ -65,6 +78,16 @@ signals:
 
     // 注册结果(注册成功后由客户端自己决定是否自动登录)
     void registerResult(bool ok, const QString &msg);
+
+    // 收到 files_reply:服务器返回了我与某好友的文件传输记录
+    void filesReceived(qint64 peer_uid, const QList<FileEntry> &files);
+
+    // 收到 download_reply ok=true:服务器准备好发文件,客户端可以切到二进制下载模式
+    void downloadReady(const QString &transfer_id, const QString &filename,
+                    qint64 size, qint64 from_uid);
+
+    // 收到 download_reply ok=false:下载请求被拒绝
+    void downloadFailed(const QString &transfer_id, const QString &msg);
 
     // 收到 error：协议层错误
     void errorMessage(const QString &msg);
