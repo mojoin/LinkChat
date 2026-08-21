@@ -38,8 +38,8 @@ SendFileDialog::~SendFileDialog()
 
 void SendFileDialog::closeEvent(QCloseEvent *event)
 {
-    // 任意一个按钮还处于置灰状态,就说明还在上传流程中,拒绝关闭
-    if (!ui->pB_Start->isEnabled())
+    // 正在传输二进制文件时,请勿关闭
+    if (m_transferring)
     {
         event->ignore();
         return;
@@ -61,9 +61,10 @@ void SendFileDialog::on_pB_Browse_clicked()
     ui->pB_Start->setEnabled(true);
     ui->progressBar->setValue(0);
     ui->label_Status->setText(
-        QStringLiteral("已选择: %1  (%2)")
+        QStringLiteral("已选择: %1  (%2) (%3 MB)")
             .arg(info.fileName())
-            .arg(QString::number(m_fileSize)));
+            .arg(QString::number(m_fileSize))
+            .arg(QString::number(m_fileSize / (1024.0 * 1024), 'f', 2)));
 }
 
 void SendFileDialog::on_pB_Start_clicked()

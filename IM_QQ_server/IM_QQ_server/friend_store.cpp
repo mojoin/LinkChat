@@ -16,11 +16,27 @@ FriendStore& FriendStore::instance()
 
 bool FriendStore::loadFromFile(const std::string& path)
 {
+    // 记下路径,saveToFile 用
+    path_ = path;
+
     std::ifstream ifs(path);
-    if (!ifs.is_open()) {
-        std::cerr << "[FriendStore] failed to open: " << path << "\n";
-        return false;
+    if (!ifs.is_open())
+    {
+        // 文件不存在 → 视为空(首次运行),不算失败
+        std::cerr << "[FriendStore] file not found, starting empty: " << path << "\n";
+        edges_.clear();
+        return true;
     }
+
+    // 文件存在但为空 → 视为空数组
+    ifs.seekg(0, std::ios::end);
+    if (ifs.tellg() == 0)
+    {
+        std::cerr << "[FriendStore] file is empty, starting empty: " << path << "\n";
+        edges_.clear();
+        return true;
+    }
+    ifs.seekg(0, std::ios::beg);
 
     json j;
     try {
@@ -80,4 +96,52 @@ FriendStore::getFriends(int uid) const
         result.push_back(std::move(f));
     }
     return result;
+}
+
+bool FriendStore::addEdge(int a, int b)
+{
+    if (a <= 0 || b <= 0 || a == b)
+        return false;
+
+    auto &va = edges_[a];
+    if (std::find(va.begin(), va.end(), b) == va.end())
+        va.push_back(b);
+
+    auto &vb = edges_[b];
+    if (std::find(vb.begin(), vb.end(), a) == vb.end())
+        vb.push_back(a);
+
+    if (!saveToFile())
+    {
+        std::cerr << "[FriendStore] addEdge: saveToFile failed\n";
+        return false;
+    }
+    return true;
+}
+
+bool FriendStore::saveToFile() const
+{
+    if (path_.empty())
+    {
+        std::cerr << "[FriendStore] saveToFile: path not set\n";
+        return false;
+    }
+
+    json arr = json::array();
+    for (const auto &kv : edges_)
+    {
+        json friendsArr = json::array();
+        for (int f : kv.second)
+            friendsArr.push_back(f);
+        arr.push_back({{"uid", kv.first}, {"friends", friendsArr}});
+    }
+
+    std::ofstream ofs(path_);
+    if (!ofs.is_open())
+    {
+        std::cerr << "[FriendStore] saveToFile: failed to open " << path_ << "\n";
+        return false;
+    }
+    ofs << arr.dump(2);
+    return true;
 }

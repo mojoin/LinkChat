@@ -6,6 +6,8 @@
 #include "tcpclient/tcpclient.h"
 #include "sendfiledialog/sendfiledialog.h"
 #include "recvfiledialog/recvfiledialog.h"
+#include "addfrienddialog/addfrienddialog.h"
+#include "friendrequestdialog/friendrequestdialog.h"
 #include <QDebug>
 
 
@@ -94,7 +96,8 @@ Widget::Widget(TcpClient *tcp, MessageHandler *handler, QWidget *parent)
         }
         SendFileDialog *dlg = new SendFileDialog(m_tcp, m_currentPeerUid, this);
         dlg->setAttribute(Qt::WA_DeleteOnClose);
-        dlg->show();
+        dlg->setModal(true);
+        dlg->exec();
     });
 
     // "收文件"按钮 → 打开收文件对话框(查看与当前好友的文件传输记录)
@@ -107,7 +110,34 @@ Widget::Widget(TcpClient *tcp, MessageHandler *handler, QWidget *parent)
         qint64 myUid = m_handler->currentUid();
         RecvFileDialog *dlg = new RecvFileDialog(m_tcp, m_handler, myUid, m_currentPeerUid, this);
         dlg->setAttribute(Qt::WA_DeleteOnClose);
-        dlg->show(); 
+        dlg->setModal(true);
+        dlg->exec();
+    });
+
+    // "添加好友"按钮 → 打开搜索 + 添加好友对话框(模态)
+    connect(ui->pB_addFriends, &QPushButton::clicked, this, [this]() {
+        if (m_currentPeerUid == 0 && m_handler->currentUid() == 0)
+        {
+            qDebug() << "[Widget] 未登录,无法添加好友";
+            return;
+        }
+        AddFriendDialog *dlg = new AddFriendDialog(m_tcp, m_handler, this);
+        dlg->setAttribute(Qt::WA_DeleteOnClose);
+        dlg->setModal(true);
+        dlg->exec();
+    });
+
+    // "好友申请"按钮 → 弹出好友申请列表对话框(模态)
+    connect(ui->pB_FriendRequest, &QPushButton::clicked, this, [this]() {
+        if (m_handler->currentUid() == 0)
+        {
+            qDebug() << "[Widget] 未登录,无法查看好友申请";
+            return;
+        }
+        FriendRequestDialog *dlg = new FriendRequestDialog(m_tcp, m_handler, this);
+        dlg->setAttribute(Qt::WA_DeleteOnClose);
+        dlg->setModal(true);
+        dlg->exec();
     });
 
     // 向服务器拉取好友列表

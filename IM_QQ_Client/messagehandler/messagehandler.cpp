@@ -74,6 +74,50 @@ void MessageHandler::sendGetFriends(qint64 uid)
     m_tcp->sendFrame(QString::fromUtf8(line));
 }
 
+void MessageHandler::sendSearchUser(qint64 uid)
+{
+    if (!m_tcp)
+        return;
+    QJsonObject req;
+    req["type"] = "search_user";
+    req["uid"] = uid;
+    QByteArray line = QJsonDocument(req).toJson(QJsonDocument::Compact);
+    m_tcp->sendFrame(QString::fromUtf8(line));
+}
+
+void MessageHandler::sendAddFriendRequest(qint64 to_uid)
+{
+    if (!m_tcp)
+        return;
+    QJsonObject req;
+    req["type"] = "add_friend_request";
+    req["to_uid"] = to_uid;
+    QByteArray line = QJsonDocument(req).toJson(QJsonDocument::Compact);
+    m_tcp->sendFrame(QString::fromUtf8(line));
+}
+
+void MessageHandler::sendListFriendRequests()
+{
+    if (!m_tcp)
+        return;
+    QJsonObject req;
+    req["type"] = "list_friend_requests";
+    QByteArray line = QJsonDocument(req).toJson(QJsonDocument::Compact);
+    m_tcp->sendFrame(QString::fromUtf8(line));
+}
+
+void MessageHandler::sendFriendRequestReply(const QString &request_id, bool accept)
+{
+    if (!m_tcp)
+        return;
+    QJsonObject req;
+    req["type"] = "friend_request_reply";
+    req["request_id"] = request_id;
+    req["accept"] = accept;
+    QByteArray line = QJsonDocument(req).toJson(QJsonDocument::Compact);
+    m_tcp->sendFrame(QString::fromUtf8(line));
+}
+
 void MessageHandler::sendChat(qint64 to_uid, const QString &msg)
 {
     if (!m_tcp)
@@ -349,6 +393,71 @@ void MessageHandler::handleJson(const QString &line)
             const QString msg = obj.value("msg").toString();
             emit loginResult(false, msg, obj);
         }
+        return;
+    }
+
+    if (type == "search_user_reply")
+    {
+        const bool ok = obj.value("ok").toBool(false);
+        qint64 uid = 0;
+        QString nickname;
+        bool online = false;
+        QString state = "none";
+
+        if (ok)
+        {
+            QJsonObject u = obj.value("user").toObject();
+            uid = u.value("uid").toVariant().toLongLong();
+            nickname = u.value("nickname").toString();
+            online = u.value("online").toBool(false);
+            state = obj.value("state").toString("none");
+        }
+
+        const QString msg = ok ? QString()
+                               : obj.value("msg").toString();
+        emit searchUserResult(uid, nickname, online, state, ok, msg);
+        return;
+    }
+
+    if (type == "add_friend_reply")
+    {
+        const bool ok = obj.value("ok").toBool(false);
+        const QString msg = obj.value("msg").toString();
+        emit addFriendResult(ok, msg);
+        return;
+    }
+
+    if (type == "friend_requests_reply")
+    {
+        QList<FriendRequestEntry> list;
+        QJsonArray arr = obj.value("requests").toArray();
+        for (const auto &v : arr)
+        {
+            QJsonObject o = v.toObject();
+            FriendRequestEntry e;
+            e.requestId = o.value("request_id").toString();
+            e.fromUid = o.value("from_uid").toVariant().toLongLong();
+            list.append(e);
+        }
+        emit friendRequestsReceived(list);
+        return;
+    }
+
+    if (type == "friend_request_reply_ack")
+    {
+        const QString rid = obj.value("request_id").toString();
+        const bool accepted = obj.value("accepted").toBool(false);
+        const bool ok = obj.value("ok").toBool(false);
+        const QString msg = obj.value("msg").toString();
+        emit friendRequestReplyAck(rid, accepted, ok, msg);
+        return;
+    }
+
+    if (type == "updateFriends")
+    {
+        // 服务器在双向好友关系生效后推这个,
+        // 客户端收到后 widget 会调 sendGetFriends 拉新列表
+        sendGetFriends(m_currentUid);
         return;
     }
 

@@ -21,7 +21,9 @@ SOURCES += \
     tcpclient/tcpclient.cpp \
     messagehandler/messagehandler.cpp \
     sendfiledialog/sendfiledialog.cpp \
-    recvfiledialog/recvfiledialog.cpp
+    recvfiledialog/recvfiledialog.cpp \
+    addfrienddialog/addfrienddialog.cpp \
+    friendrequestdialog/friendrequestdialog.cpp
 
 HEADERS += \
     widget.h \
@@ -31,14 +33,18 @@ HEADERS += \
     tcpclient/tcpclient.h   \
     messagehandler/messagehandler.h \
     sendfiledialog/sendfiledialog.h \
-    recvfiledialog/recvfiledialog.h
+    recvfiledialog/recvfiledialog.h \
+    addfrienddialog/addfrienddialog.h \
+    friendrequestdialog/friendrequestdialog.h
 
 FORMS += \
     widget.ui \
     logindialog.ui \
     registerdialog/registerdialog.ui \
     sendfiledialog/sendfiledialog.ui \
-    recvfiledialog/recvfiledialog.ui
+    recvfiledialog/recvfiledialog.ui \
+    addfrienddialog/addfrienddialog.ui \
+    friendrequestdialog/friendrequestdialog.ui
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

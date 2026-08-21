@@ -1,4 +1,4 @@
-#ifndef MESSAGEHANDLER_H
+﻿#ifndef MESSAGEHANDLER_H
 #define MESSAGEHANDLER_H
 
 #include <QObject>
@@ -13,25 +13,32 @@ class MessageHandler : public QObject
 {
     Q_OBJECT
 public:
-
-    struct HistoryMsg {
+    struct HistoryMsg
+    {
         qint64 fromUid;
         QString msg;
         QString time;
     };
 
-    struct FriendInfo {
+    struct FriendInfo
+    {
         qint64 uid;
         QString nickname;
         bool online;
     };
 
-    struct FileEntry {
+    struct FileEntry
+    {
         QString transferId;
-        qint64  fromUid = 0;
+        qint64 fromUid = 0;
         QString filename;
-        qint64  size = 0;
+        qint64 size = 0;
         QString time;
+    };
+
+    struct FriendRequestEntry {
+        QString requestId;
+        qint64  fromUid = 0;
     };
 
     void sendChat(qint64 to_uid, const QString &msg);
@@ -40,7 +47,12 @@ public:
     // 当前登录用户 uid(登录后存起来)
     qint64 currentUid() const { return m_currentUid; }
 
+    // 好友相关
     void sendGetFriends(qint64 uid);
+    void sendSearchUser(qint64 uid);
+    void sendAddFriendRequest(qint64 to_uid);
+    void sendListFriendRequests();
+    void sendFriendRequestReply(const QString &request_id, bool accept);
 
     // 文件传输相关
     void sendListFiles(qint64 peer_uid);
@@ -77,6 +89,20 @@ signals:
     // 收到 login_reply：登录结果
     void loginResult(bool ok, const QString &msg, const QJsonObject &extra);
 
+    // 收到 search_user_reply:搜索结果
+    // state 取值: "none" / "already_friend" / "pending_sent"
+    void searchUserResult(qint64 uid, const QString &nickname, bool online, const QString &state, bool ok, const QString &msg);
+    
+    // 收到 add_friend_reply:添加好友结果
+    void addFriendResult(bool ok, const QString &msg);
+
+    // 收到 friend_requests_reply:加我的请求列表
+    void friendRequestsReceived(const QList<FriendRequestEntry> &requests);
+
+    // 收到 friend_request_reply_ack:我点同意/拒绝后,服务器告知处理完成
+    // 客户端可以据此从申请列表里移掉这条
+    void friendRequestReplyAck(const QString &request_id, bool accepted, bool ok, const QString &msg);
+
     // 注册结果(注册成功后由客户端自己决定是否自动登录)
     void registerResult(bool ok, const QString &msg);
 
@@ -85,7 +111,7 @@ signals:
 
     // 收到 download_reply ok=true:服务器准备好发文件,客户端可以切到二进制下载模式
     void downloadReady(const QString &transfer_id, const QString &filename,
-                    qint64 size, qint64 from_uid);
+                       qint64 size, qint64 from_uid);
 
     // 收到 download_reply ok=false:下载请求被拒绝
     void downloadFailed(const QString &transfer_id, const QString &msg);
@@ -105,9 +131,9 @@ private slots:
 private:
     void handleJson(const QString &line);
     void handlePlain(const QString &line);
-    TcpClient* m_tcp;
+    TcpClient *m_tcp;
     bool m_handshaked = false; // 是否已完成握手（避免重复触发）
-    qint64 m_currentUid = 0;  // 登录成功后存(用户id)
+    qint64 m_currentUid = 0;   // 登录成功后存(用户id)
 };
 
 #endif // MESSAGEHANDLER_H

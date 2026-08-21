@@ -15,6 +15,7 @@
 #include "net.h"
 #include "message_store.h"
 #include "file_store.h"
+#include "friend_request_store.h"
 
 #include <string>
 
@@ -396,6 +397,236 @@ namespace
             reply["msg"] = "delete failed";
         return reply.dump();
     }
+
+    // 客户端发:{"type":"search_user","uid":10002}
+    // 成功回:{"type":"search_user_reply","ok":true,
+    //         "user":{"uid":10002,"nickname":"小红","online":true},
+    //         "state":"none"}
+    // 失败回:{"type":"search_user_reply","ok":false,"msg":"user not found"}
+    // state 取值:
+    //     "none"          - 没有关系,可以加
+    //     "already_friend" - 已经是好友(灰色按钮用,本次仍返回)
+    //     "pending_sent"  - 已发过待处理请求(灰色按钮用,本次仍返回)
+    string handleSearchUser(const json &req, int from_uid)
+    {
+        if (from_uid == 0)
+            return makeError("search_user: not logged in");
+        if (!req.contains("uid") || !req["uid"].is_number_integer())
+            return makeError("search_user: missing or invalid 'uid' field");
+
+        const int target = req["uid"].get<int>();
+
+        // 目标用户是否存在
+        auto nick = UserStore::instance().getNickname(target);
+        if (!nick.has_value())
+        {
+            json reply;
+            reply["type"] = "search_user_reply";
+            reply["ok"] = false;
+            reply["msg"] = "user not found";
+            return reply.dump();
+        }
+
+        // 判断 state:本次客户端不消费这个字段,但服务器直接算好,后续做灰色按钮不用改协议
+        std::string state = "none";
+        for (const auto &f : FriendStore::instance().getFriends(from_uid))
+        {
+            if (f.uid == target)
+            {
+                state = "already_friend";
+                break;
+            }
+        }
+        if (state == "none" && FriendRequestStore::instance().hasPending(from_uid, target))
+        {
+            state = "pending_sent";
+        }
+
+        json reply;
+        reply["type"] = "search_user_reply";
+        reply["ok"] = true;
+        reply["user"] = {
+            {"uid", target},
+            {"nickname", *nick},
+            {"online", isUserOnline(target)}};
+        reply["state"] = state;
+        return reply.dump();
+    }
+
+    // 发起好友申请
+    // 客户端发:{"type":"add_friend_request","to_uid":10002}
+    // 成功回:{"type":"add_friend_reply","ok":true,"request_id":"frq_xxx"}
+    // 失败回:{"type":"add_friend_reply","ok":false,"msg":"..."}
+    //   msg 取值: cannot add self / user not found / already friends / request already pending
+    string handleAddFriendRequest(const json &req, int from_uid)
+    {
+        if (from_uid == 0)
+            return makeError("add_friend_request: not logged in");
+        if (!req.contains("to_uid") || !req["to_uid"].is_number_integer())
+            return makeError("add_friend_request: missing or invalid 'to_uid' field");
+
+        const int to_uid = req["to_uid"].get<int>();
+
+        // 加自己
+        if (to_uid == from_uid)
+        {
+            json reply;
+            reply["type"] = "add_friend_reply";
+            reply["ok"] = false;
+            reply["msg"] = "cannot add self";
+            return reply.dump();
+        }
+
+        // 目标用户是否存在
+        auto nick = UserStore::instance().getNickname(to_uid);
+        if (!nick.has_value())
+        {
+            json reply;
+            reply["type"] = "add_friend_reply";
+            reply["ok"] = false;
+            reply["msg"] = "user not found";
+            return reply.dump();
+        }
+
+        // 已经是好友
+        for (const auto &f : FriendStore::instance().getFriends(from_uid))
+        {
+            if (f.uid == to_uid)
+            {
+                json reply;
+                reply["type"] = "add_friend_reply";
+                reply["ok"] = false;
+                reply["msg"] = "already friends";
+                return reply.dump();
+            }
+        }
+
+        // 已有 pending
+        if (FriendRequestStore::instance().hasPending(from_uid, to_uid))
+        {
+            json reply;
+            reply["type"] = "add_friend_reply";
+            reply["ok"] = false;
+            reply["msg"] = "request already pending";
+            return reply.dump();
+        }
+
+        // 全部通过 → 落盘
+        const string request_id = FriendRequestStore::instance().append(from_uid, to_uid);
+
+        json reply;
+        reply["type"] = "add_friend_reply";
+        reply["ok"] = true;
+        reply["request_id"] = request_id;
+        reply["to_uid"] = to_uid;
+        return reply.dump();
+    }
+
+    // 拉取加我的所有 pending 请求
+    // 客户端发:{"type":"list_friend_requests"}
+    // 服务器回:{"type":"friend_requests_reply","ok":true,"requests":[
+    // {"request_id":"frq_xxx","from_uid":10001}, ...]}
+    string handleListFriendRequests(int from_uid)
+    {
+        if (from_uid == 0)
+            return makeError("list_friend_requests: not logged in");
+
+        auto records = FriendRequestStore::instance().listPendingFor(from_uid);
+
+        json arr = json::array();
+        for (const auto &r : records)
+        {
+            arr.push_back({{"request_id", r.request_id},
+                           {"from_uid", r.from_uid}});
+        }
+
+        json reply;
+        reply["type"] = "friend_requests_reply";
+        reply["ok"] = true;
+        reply["requests"] = arr;
+        return reply.dump();
+    }
+
+    // 同意/拒绝好友申请
+    // 客户端发:{"type":"friend_request_reply","request_id":"frq_xxx","accept":true}
+    // 服务器回:{"type":"friend_request_reply_ack","ok":true,"request_id":"frq_xxx","accepted":true}
+    // 同意时:friends.json 双向加边 + 删 request
+    //        若原申请方(from_uid)在线,推 friend_added 让他刷新好友列表
+    // 拒绝时:仅删 request
+    string handleFriendRequestReply(const json &req, int from_uid)
+    {
+        if (from_uid == 0)
+            return makeError("friend_request_reply: not logged in");
+        if (!req.contains("request_id") || !req["request_id"].is_string())
+            return makeError("friend_request_reply: missing or invalid 'request_id' field");
+        if (!req.contains("accept") || !req["accept"].is_boolean())
+            return makeError("friend_request_reply: missing or invalid 'accept' field");
+
+        const string tid = req["request_id"].get<string>();
+        const bool accept = req["accept"].get<bool>();
+
+        auto rec = FriendRequestStore::instance().findById(tid);
+        if (!rec)
+        {
+            json reply;
+            reply["type"] = "friend_request_reply_ack";
+            reply["ok"] = false;
+            reply["request_id"] = tid;
+            reply["msg"] = "request not found";
+            return reply.dump();
+        }
+
+        // 权限校验:只有 to_uid 才能处理这条请求
+        if (rec->to_uid != from_uid)
+        {
+            json reply;
+            reply["type"] = "friend_request_reply_ack";
+            reply["ok"] = false;
+            reply["request_id"] = tid;
+            reply["msg"] = "permission denied";
+            return reply.dump();
+        }
+
+        const int peer_uid = rec->from_uid;
+
+        if (accept)
+        {
+            // 双向加边
+            FriendStore::instance().addEdge(from_uid, peer_uid);
+        }
+
+        // 1) 删 request(无论同意/拒绝都删)
+        FriendRequestStore::instance().remove(tid);
+
+        // 2) ack 给处理方：让客户端知道服务器已处理,可以从申请列表里移掉这条
+        json reply;
+        reply["type"] = "friend_request_reply_ack";
+        reply["ok"] = true;
+        reply["request_id"] = tid;
+        reply["accepted"] = accept;
+
+        if (accept)
+        {
+            // 给处理方（from_uid,他必然在线,正在操作）
+            int my_fd = fdOfUser(from_uid);
+            if (my_fd != -1)
+            {
+                json push;
+                push["type"] = "updateFriends";
+                sendReplyToFd(my_fd, push.dump());
+            }
+            int peer_fd = fdOfUser(peer_uid);
+            if (peer_fd != -1)
+            {
+                json push;
+                push["type"] = "updateFriends";
+                push["ok"] = true;
+                sendReplyToFd(peer_fd, push.dump());
+            }
+        }
+
+        return reply.dump();
+    }
 } // namespace
 
 string handleMessage(const std::string &line, int from_uid, int fd)
@@ -438,6 +669,14 @@ string handleMessage(const std::string &line, int from_uid, int fd)
         return handleDownloadFile(req, from_uid, fd);
     if (type == "delete_file")
         return handleDeleteFile(req, from_uid);
+    if (type == "search_user")
+        return handleSearchUser(req, from_uid);
+    if (type == "add_friend_request")
+        return handleAddFriendRequest(req, from_uid);
+    if (type == "list_friend_requests")
+        return handleListFriendRequests(from_uid);
+    if (type == "friend_request_reply")
+        return handleFriendRequestReply(req, from_uid);
 
     return makeError("unknown type: " + type);
 }

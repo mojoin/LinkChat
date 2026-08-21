@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>AddFriendDialog</class>
+ <widget class="QDialog" name="AddFriendDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>420</width>
+    <height>280</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>添加好友</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout_Main">
+   <item>
+    <widget class="QLabel" name="label_Title">
+ <property name="styleSheet">
+      <string notr="true">font-size:14px; font-weight:bold;</string>
+     </property>
+     <property name="text">
+      <string>搜索并添加好友</string>
+     </property>
+    </widget>
+   </item>
+
+   <!-- 第一行:输入uid + 搜索按钮 -->
+   <item>
+    <widget class="QWidget" name="widget_SearchRow" native="true">
+ <layout class="QHBoxLayout" name="horizontalLayout_Search">
+      <property name="leftMargin"><number>0</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+      <item>
+       <widget class="QLabel" name="label_UidPrompt">
+        <property name="text">
+ <string>用户uid:</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLineEdit" name="lineEdit_Uid">
+        <property name="placeholderText">
+         <string>请输入对方uid</string>
+        </property>
+ </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="pB_Search">
+        <property name="minimumSize">
+         <size><width>60</width><height>0</height></size>
+         </property>
+        <property name="text">
+         <string>搜索</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <!-- 第二行:显示搜索结果(用 QFormLayout 风格的几个 label) -->
+   <item>
+    <widget class="QGroupBox" name="groupBox_Result">
+     <property name="title">
+      <string>用户信息</string>
+     </property>
+     <layout class="QFormLayout" name="formLayout_Result">
+      <item row="0" column="0">
+       <widget class="QLabel" name="label_UidText">
+        <property name="text">
+         <string>uid:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLabel" name="label_Uid">
+        <property name="text">
+         <string>-</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="label_NicknameText">
+        <property name="text">
+         <string>昵称:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QLabel" name="label_Nickname">
+        <property name="text">
+         <string>-</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="label_OnlineText">
+        <property name="text">
+         <string>状态:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="QLabel" name="label_Online">
+        <property name="text">
+         <string>-</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <!-- 第三行:状态条 -->
+   <item>
+    <widget class="QLabel" name="label_Status">
+     <property name="styleSheet">
+      <string notr="true">color:#666666;</string>
+     </property>
+     <property name="text">
+      <string>请输入用户uid并点击搜索</string>
+     </property>
+    </widget>
+   </item>
+
+   <!-- 第四行:添加 + 取消 -->
+   <item>
+    <widget class="QWidget" name="widget_BottomRow" native="true">
+     <layout class="QHBoxLayout" name="horizontalLayout_Bottom">
+      <property name="leftMargin"><number>0</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+      <item>
+       <spacer name="horizontalSpacer_Bottom">
+        <property name="orientation">
+         <enum>Qt::Orientation::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size><width>40</width><height>20</height></size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QPushButton" name="pB_Add">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="minimumSize">
+         <size><width>80</width><height>30</height></size>
+ </property>
+        <property name="text">
+         <string>添加好友</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="pB_Cancel">
+        <property name="minimumSize">
+         <size><width>80</width><height>30</height></size>
+         </property>
+        <property name="text">
+         <string>关闭</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

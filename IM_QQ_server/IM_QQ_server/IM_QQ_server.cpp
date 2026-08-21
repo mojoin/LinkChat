@@ -2,6 +2,7 @@
 #include "net.h"
 #include "user_store.h"
 #include "friend_store.h"
+#include "friend_request_store.h"
 
 using namespace std;
 
@@ -86,6 +87,10 @@ int main(int argc, char *argv[])
         // 启动前把好友关系从 data/friends.json 加载进内存
         if (!FriendStore::instance().loadFromFile("data/friends.json")) {
             cerr << "Failed to load friends from data/friends.json; get_friends will return empty.\n";
+        }
+        // 启动前把好友申请从 data/friend_requests.json 加载进内存（首次运行文件不存在也算成功）
+        if (!FriendRequestStore::instance().loadFromFile("data/friend_requests.json")) {
+            cerr << "Failed to load friend_requests from data/friend_requests.json; add_friend_request may misbehave.\n";
         }
         startServer(9527);    // ← 网络层入口（业务细节全部在 net.cpp 里）
     }
