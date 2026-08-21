@@ -607,20 +607,21 @@ namespace
 
         if (accept)
         {
-            // 给处理方（from_uid,他必然在线,正在操作）
+            // 给处理方(from_uid,他必然在线,正在操作)—— 但可能正在传文件
             int my_fd = fdOfUser(from_uid);
-            if (my_fd != -1)
+            if (my_fd != -1 && !isFdBusy(my_fd))
             {
                 json push;
                 push["type"] = "updateFriends";
                 sendReplyToFd(my_fd, push.dump());
             }
+
+            // 给原申请方(peer_uid 在线时)
             int peer_fd = fdOfUser(peer_uid);
-            if (peer_fd != -1)
+            if (peer_fd != -1 && !isFdBusy(peer_fd))
             {
                 json push;
                 push["type"] = "updateFriends";
-                push["ok"] = true;
                 sendReplyToFd(peer_fd, push.dump());
             }
         }

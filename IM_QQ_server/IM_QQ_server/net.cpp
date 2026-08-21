@@ -56,6 +56,13 @@ bool isUserOnline(int uid)
     return user2fd.count(to_string(uid)) > 0;
 }
 
+bool isFdBusy(int fd)
+{
+    auto it = clients.find(fd);
+    if (it == clients.end()) return false;
+    return it->second.mode != MODE_JSON;
+}
+
 static int trySend(socket_t fd, const string &buf)
 {
     ssize_t n = send(fd, buf.data(), buf.size(), 0);

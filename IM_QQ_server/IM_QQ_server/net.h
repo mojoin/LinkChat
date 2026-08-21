@@ -63,6 +63,8 @@ extern std::map<socket_t, std::string> send_buffers;
 extern std::map<socket_t, FileTransferState> file_state;
 
 bool isUserOnline(int uid);
+// 返回 fd 是否处于二进制模式(upload/download 中),此时不能塞 JSON
+bool isFdBusy(int fd);
 void startServer(int port = 9527);
 // 根据 uid 查 fd(uid 在线时返回 fd,不在线返回 -1)
 int fdOfUser(int uid);
