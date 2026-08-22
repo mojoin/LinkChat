@@ -167,10 +167,8 @@ static void flushSendBuf(socket_t fd, int epoll_fd)
             // sr == 0：这一帧成功送出
             if (got == 0)
             {
-                // 文件读完，发 FIN（4 字节 0）
-                uint32_t zero_be = 0;
-                std::string fin((char *)&zero_be, 4);
-                trySend(fd, fin); // FIN 极小，基本 sr==0
+                // got==0 时上面 trySend(fd, frame) 发出的就是 0 长度帧,
+                // 即协议里的 FIN,无需再发第二个 FIN
                 st.eof_sent = true;
                 st.file_in.close();
                 clients[fd].mode = MODE_JSON;

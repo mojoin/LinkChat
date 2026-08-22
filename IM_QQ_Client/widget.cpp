@@ -19,6 +19,8 @@ Widget::Widget(TcpClient *tcp, MessageHandler *handler, QWidget *parent)
 {
     ui->setupUi(this);
 
+    ui->label_user->setText(QStringLiteral("%1 (%2)").arg(m_handler->currentNickname()).arg(m_handler->currentUid()));
+
     // 让 QTextEdit 行为像 QLineEdit
     ui->lineEidt_Message->setLineWrapMode(QTextEdit::NoWrap);  // 不自动折行
     // ui->lineEidt_Message->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);  // 隐藏横滚动条

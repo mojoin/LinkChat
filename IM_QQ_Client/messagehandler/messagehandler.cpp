@@ -386,6 +386,8 @@ void MessageHandler::handleJson(const QString &line)
         const bool ok = obj.value("ok").toBool(false);
         if (ok)
         {
+            m_currentUid = obj.value("uid").toVariant().toLongLong();
+            m_currentNick = obj.value("nickname").toString();
             emit loginResult(true, QString(), obj);
         }
         else

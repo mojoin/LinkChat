@@ -46,6 +46,8 @@ public:
 
     // 当前登录用户 uid(登录后存起来)
     qint64 currentUid() const { return m_currentUid; }
+    // 当前登录用户 nickname(登录后存起来)
+    QString currentNickname() const { return m_currentNick; }
 
     // 好友相关
     void sendGetFriends(qint64 uid);
@@ -134,6 +136,7 @@ private:
     TcpClient *m_tcp;
     bool m_handshaked = false; // 是否已完成握手（避免重复触发）
     qint64 m_currentUid = 0;   // 登录成功后存(用户id)
+    QString m_currentNick;
 };
 
 #endif // MESSAGEHANDLER_H

@@ -380,7 +380,8 @@ void TcpClient::onReadyRead()
     if (m_downloading)
     {
         processBinaryRecv();
-        return;
+        if (m_downloading)
+            return;
     }
 
     // 循环切出每一行（以 \n 为帧边界）
